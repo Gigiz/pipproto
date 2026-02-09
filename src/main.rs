@@ -7,22 +7,22 @@ enum MsgType {
     Error = 0x04,
 }
 
-impl MsgType {
-    fn from_u8(v: u8) -> Option<MsgType> {
-        match v {
-            0x01 => Some(MsgType::Event),
-            0x02 => Some(MsgType::Command),
-            0x03 => Some(MsgType::Ack),
-            0x04 => Some(MsgType::Error),
-            _ => None,
-        }
-    }
-}
-
 struct Frame {
     version: u8,
     msg_type: MsgType,
     counter: u64,
+}
+
+impl Frame {
+    fn encode_header(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.push(b'P');
+        out.push(b'P');
+        out.push(self.version);
+        out.push(self.msg_type as u8);
+        out.extend_from_slice(&self.counter.to_be_bytes());
+        out
+    }
 }
 
 fn main() {
@@ -32,10 +32,10 @@ fn main() {
         counter: 1,
     };
 
-    let t: u8 = frame.msg_type as u8;
-    println!("MsgType byte = 0x{:02x}", t);
+    let bytes = frame.encode_header();
 
-    // esempio di parse
-    let parsed = MsgType::from_u8(0x02).unwrap();
-    println!("Parsed = {:?}", parsed);
+    for b in &bytes {
+        print!("{:02x} ", b);
+    }
+    println!();
 }
