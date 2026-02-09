@@ -63,6 +63,12 @@ struct FrameHeaderV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct FrameV1 {
+    header: FrameHeaderV1,
+    body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum DecodeError {
     TooShort,
     BadMagic,
@@ -130,7 +136,9 @@ impl FrameHeaderV1 {
             .map_err(|_| DecodeError::BadCounterBytes)?;
         let counter = u64::from_be_bytes(counter_bytes);
 
-        Ok(FrameHeaderV1::toggle(version, msg_type, flags, device_id, counter))
+        Ok(FrameHeaderV1::toggle(
+            version, msg_type, flags, device_id, counter,
+        ))
     }
 
     fn toggle(
@@ -150,17 +158,37 @@ impl FrameHeaderV1 {
     }
 }
 
+impl FrameV1 {
+    fn encode(&self) -> Vec<u8> {
+        let mut out = self.header.encode();
+        out.extend_from_slice(&self.body);
+        out
+    }
+
+    fn decode(input: &[u8]) -> Result<Self, DecodeError> {
+        let header = FrameHeaderV1::decode(input)?;
+        let body = input[HEADER_LEN_V1..].to_vec();
+        Ok(FrameV1 { header, body })
+    }
+}
+
 fn main() {
     let header = FrameHeaderV1 {
         version: VERSION_V1,
         msg_type: MsgType::Event,
         flags: Flags::new(Flags::ACK_REQUIRED).unwrap(),
-        device_id: *b"DEV00001", // 8 bytes
+        device_id: *b"DEV00001",
         counter: 42,
     };
 
-    let bytes = header.encode();
-    let parsed = FrameHeaderV1::decode(&bytes).unwrap();
+    let frame = FrameV1 {
+        header,
+        body: b"hello-body".to_vec(),
+    };
+
+    let bytes = frame.encode();
+    let parsed = FrameV1::decode(&bytes).unwrap();
+
     println!("{parsed:?}");
 }
 
@@ -246,5 +274,25 @@ mod tests {
 
         let f2 = Flags::new(0).unwrap();
         assert!(!f2.ack_required());
+    }
+
+    #[test]
+    fn roundtrip_frame_with_body() {
+        let header = FrameHeaderV1 {
+            version: VERSION_V1,
+            msg_type: MsgType::Event,
+            flags: Flags::new(0).unwrap(),
+            device_id: *b"ABCDEFGH",
+            counter: 999,
+        };
+
+        let f = FrameV1 {
+            header,
+            body: vec![1, 2, 3, 4, 5],
+        };
+
+        let bytes = f.encode();
+        let parsed = FrameV1::decode(&bytes).unwrap();
+        assert_eq!(parsed, f);
     }
 }
